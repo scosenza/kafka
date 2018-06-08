@@ -360,6 +360,7 @@ public class StreamsConfig extends AbstractConfig {
     private static final String[] NON_CONFIGURABLE_CONSUMER_EOS_CONFIGS = new String[] {ConsumerConfig.ISOLATION_LEVEL_CONFIG};
     private static final String[] NON_CONFIGURABLE_PRODUCER_EOS_CONFIGS = new String[] {ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG,
                                                                                         ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION};
+    public static final String STREAMS_PARTITION_ASSIGNMENT_STRATEGY_CONFIG = "streams.partition.assignment.strategy";
 
     static {
         CONFIG = new ConfigDef()
@@ -799,7 +800,14 @@ public class StreamsConfig extends AbstractConfig {
         consumerProps.put(REPLICATION_FACTOR_CONFIG, getInt(REPLICATION_FACTOR_CONFIG));
         consumerProps.put(APPLICATION_SERVER_CONFIG, getString(APPLICATION_SERVER_CONFIG));
         consumerProps.put(NUM_STANDBY_REPLICAS_CONFIG, getInt(NUM_STANDBY_REPLICAS_CONFIG));
-        consumerProps.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, StreamPartitionAssignor.class.getName());
+
+        Object streamsPartitionAssignmentStrategyValue = consumerProps.get(STREAMS_PARTITION_ASSIGNMENT_STRATEGY_CONFIG);
+        if (streamsPartitionAssignmentStrategyValue != null) {
+            consumerProps.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, streamsPartitionAssignmentStrategyValue);
+        } else {
+            consumerProps.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG, StreamPartitionAssignor.class.getName());
+        }
+
         consumerProps.put(WINDOW_STORE_CHANGE_LOG_ADDITIONAL_RETENTION_MS_CONFIG, getLong(WINDOW_STORE_CHANGE_LOG_ADDITIONAL_RETENTION_MS_CONFIG));
 
         // add admin retries configs for creating topics

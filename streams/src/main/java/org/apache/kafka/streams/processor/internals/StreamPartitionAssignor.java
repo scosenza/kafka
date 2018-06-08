@@ -35,6 +35,7 @@ import org.apache.kafka.streams.processor.internals.assignment.AssignmentInfo;
 import org.apache.kafka.streams.processor.internals.assignment.ClientState;
 import org.apache.kafka.streams.processor.internals.assignment.StickyTaskAssignor;
 import org.apache.kafka.streams.processor.internals.assignment.SubscriptionInfo;
+import org.apache.kafka.streams.processor.internals.assignment.TaskAssignor;
 import org.apache.kafka.streams.state.HostInfo;
 import org.slf4j.Logger;
 
@@ -62,11 +63,11 @@ public class StreamPartitionAssignor implements PartitionAssignor, Configurable 
     private Logger log;
     private String logPrefix;
 
-    private static class AssignedPartition implements Comparable<AssignedPartition> {
+    public static class AssignedPartition implements Comparable<AssignedPartition> {
         public final TaskId taskId;
         public final TopicPartition partition;
 
-        AssignedPartition(final TaskId taskId, final TopicPartition partition) {
+        public AssignedPartition(final TaskId taskId, final TopicPartition partition) {
             this.taskId = taskId;
             this.partition = partition;
         }
@@ -92,10 +93,10 @@ public class StreamPartitionAssignor implements PartitionAssignor, Configurable 
         }
     }
 
-    private static class ClientMetadata {
-        final HostInfo hostInfo;
-        final Set<String> consumers;
-        final ClientState state;
+    public static class ClientMetadata {
+        public final HostInfo hostInfo;
+        public final Set<String> consumers;
+        public final ClientState state;
 
         ClientMetadata(final String endPoint) {
 
@@ -488,7 +489,7 @@ public class StreamPartitionAssignor implements PartitionAssignor, Configurable 
         log.debug("Assigning tasks {} to clients {} with number of replicas {}",
                 partitionsForTask.keySet(), states, numStandbyReplicas);
 
-        final StickyTaskAssignor<UUID> taskAssignor = new StickyTaskAssignor<>(states, partitionsForTask.keySet());
+        final TaskAssignor<UUID, TaskId> taskAssignor = createTaskAssignor(partitionsForTask, states, clientsMetadata);
         taskAssignor.assign(numStandbyReplicas);
 
         log.info("Assigned tasks to clients as {}.", states);
@@ -513,7 +514,11 @@ public class StreamPartitionAssignor implements PartitionAssignor, Configurable 
         }
         taskManager.setPartitionsByHostState(partitionsByHostState);
 
-        // within the client, distribute tasks to its owned consumers
+        return distributeTasks(clientsMetadata, minUserMetadataVersion, partitionsForTask, partitionsByHostState);
+    }
+
+    // within the client, distribute tasks to its owned consumers
+    protected Map<String, Assignment> distributeTasks(Map<UUID, ClientMetadata> clientsMetadata, int minUserMetadataVersion, Map<TaskId, Set<TopicPartition>> partitionsForTask, Map<HostInfo, Set<TopicPartition>> partitionsByHostState) {
         final Map<String, Assignment> assignment = new HashMap<>();
         for (Map.Entry<UUID, ClientMetadata> entry : clientsMetadata.entrySet()) {
             final Set<String> consumers = entry.getValue().consumers;
@@ -566,8 +571,12 @@ public class StreamPartitionAssignor implements PartitionAssignor, Configurable 
         return assignment;
     }
 
+    protected TaskAssignor<UUID, TaskId> createTaskAssignor(Map<TaskId, Set<TopicPartition>> partitionsForTask, Map<UUID, ClientState> states, Map<UUID, StreamPartitionAssignor.ClientMetadata> clients) {
+        return new StickyTaskAssignor<>(states, partitionsForTask.keySet());
+    }
+
     // visible for testing
-    List<List<TaskId>> interleaveTasksByGroupId(final Collection<TaskId> taskIds, final int numberThreads) {
+    protected List<List<TaskId>> interleaveTasksByGroupId(final Collection<TaskId> taskIds, final int numberThreads) {
         final LinkedList<TaskId> sortedTasks = new LinkedList<>(taskIds);
         Collections.sort(sortedTasks);
         final List<List<TaskId>> taskIdsForConsumerAssignment = new ArrayList<>(numberThreads);
